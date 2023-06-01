@@ -8,9 +8,7 @@ This repository contains the scripts and data necessary to produce figures simil
 
 /Example.ipynb is a JupyterNotebook which outlines how to use both scripts.
 
-Data/C1_HI_MKT+GBT.fits, Data/C2_HI_MKT+GBT.fits and Data/C3_HI_MKT+GBT.fits are the three HI PPV MeerKAT data cubes that have all been feathered with single dish, GBT data.
-
-Data/C1_HI_MKT+GBT_COregrid.fits and Data/C2_HI_MKT+GBT_COregrid.fits have been regrid to the spatial resolution of the CO data.
+Data/C1_HI_MKT+GBT_COregrid.fits and Data/C2_HI_MKT+GBT_COregrid.fits are the two HI PPV MeerKAT data cubes that have all been feathered with single dish, GBT data. These cubes have been regrid to the spatial resolution of the CO data. For access to C3, please email me as the file is too large to upload to GitHub.
 
 Data/C1_CO_APEX.fits and Data/C2_CO_APEX.fits are the two CO data cubes from the APEX telescope. 
 
