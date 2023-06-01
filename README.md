@@ -13,7 +13,7 @@ Data/C1_HI_MKT+GBT.fits, Data/C2_HI_MKT+GBT.fits and Data/C3_HI_MKT+GBT.fits are
 Data/C1_CO_APEX.fits and Data/C2_CO_APEX.fits are the two CO data cubes from the APEX telescope. 
 
 ## License
-This code is distributed under the terms of the GNU General Public License version 3.0. The text of the license is included in the main directory of the repository as /LICENSE.txt.
+This code is distributed under the terms of the GNU General Public License version 3.0. The text of the license is included in the main directory of the repository as /LICENSE.
 
 ## Contact information
 If you have any questions, please contact Karlie Noon, karlie.noon@anu.edu.au.
