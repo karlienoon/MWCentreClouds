@@ -14,7 +14,7 @@ from matplotlib.colors import ListedColormap
 # analysis on 2D radio maps.
 ########################################################################
 class Radio_maps:
-    def __init__(self, filename, dist):
+    def __init__(self, filename, dist, XCO):
         '''
         Initialises the Radio_maps Class. 
         This module opens and reads FITS files, and defines the map's 
@@ -26,6 +26,8 @@ class Radio_maps:
                 the directory link to a radio cube fits file
             dist: float
                 distance to the object in kpc
+            XCO: float
+                CO-H2 conversion factor
         Returns
             Nothing
         '''
@@ -54,6 +56,7 @@ class Radio_maps:
         self.dy = self.lat[self.initial_pix]-self.lat[
             int(self.initial_pix-np.abs(np.rint(y_step)))]
         self.ticks = np.around(self.levels, decimals=1)
+        self.XCO = XCO
 
     ########################################################################
     # Method to generate an annotated column density map from a 0th moment 
@@ -92,14 +95,15 @@ class Radio_maps:
         cb = fig.colorbar(mapm0, ax = ax1, orientation = 'horizontal', 
                           location="top", ticks=self.ticks)
         cb.ax.tick_params(labelsize=fontsize)
+        
         # Changes label of colorbar depending on species
         if species == 'HI':
             cb.set_label(
-                r'$N_\mathrm{HI} \times \mathrm{10}^{20}$ ($\mathrm{cm}^{-2}$)'
+                r'$N_\mathrm{HI}$ ($\mathrm{cm}^{-2}$)'
                 , labelpad=5, fontsize=fontsize)
         else:
              cb.set_label(
-                 r'$N_\mathrm{H2} \times \mathrm{10}^{20}$ ($\mathrm{cm}^{-2}$)'
+                 r'$N_\mathrm{H2}$ ($\mathrm{cm}^{-2}$)'
                  , labelpad=5, fontsize=fontsize)
         cb.ax.xaxis.set_label_position('top')
         cb.ax.xaxis.set_ticks_position('bottom')
@@ -128,6 +132,7 @@ class Radio_maps:
         ax1.hlines(y=self.lat[5], xmin=self.lon[xmin_scale], 
                    xmax=self.lon[xmin_scale+five_arcmin], linewidth=3, 
                    color='k')
+        
         # Beam ellipse
         bmaj = (26.1057202736292*u.arcsec).to(u.deg)
         bmin = (21.5060080646916*u.arcsec).to(u.deg)
@@ -161,6 +166,7 @@ class Radio_maps:
         # Figure parameters
         fontsize = 18
         props = dict(boxstyle='round', facecolor='lightgrey', alpha=1)
+        
         # Plotting HI
         image_field = ax.imshow(self.data, origin='lower', aspect='auto'
                                 ,cmap='Greys',  extent=self.extent, 
@@ -169,6 +175,7 @@ class Radio_maps:
         ax.contour(self.data, origin='lower', levels=self.levels, 
                    colors='k', linewidths=0.7, alpha=1, 
                    linestyles='solid', extent=self.extent)
+        
         # Plotting CO
         ax.contourf(other.data, levels=other.levels, cmap='BuPu', 
                     vmin=other.vmin, vmax=other.vmax, 
@@ -176,6 +183,7 @@ class Radio_maps:
         ax.contour(other.data, levels=other.levels, colors='k', 
                    linewidths=0.7, 
                    linestyles='solid', extent=other.extent)
+        
         # Below line is useful if CO map is prefered over contourf
         #image_density = ax.imshow(other.data, origin='lower', 
                                 # aspect='auto',cmap='BuPu', alpha=1, 
@@ -197,10 +205,12 @@ class Radio_maps:
         # Annotations
         ax.text(.02, .98, self.header["OBJECT"], fontsize=fontsize,ha='left'
                 , va='top', transform=axs.transAxes, bbox=props)
+        
         ax.arrow(self.lon[int(self.lon.shape[0]*(1/3))], 
                  self.lat[int(self.lat.shape[0]*(3/4))],
                 -self.dx, self.dy, head_width = 0.008, 
                 width = 0.0005)
+        
         # Save figure
         plt.savefig(self.filename[:-5]+"overlay_map.pdf",bbox_inches='tight')
 
@@ -224,11 +234,15 @@ class Radio_maps:
         # 1.67e-27 factor is the mass of a hydrogen atom, Hnuclei is a 
         # parameter to account for elements other than HI. Hnuclei is 1 if 
         # the data is HI, 2 if it is CO. 
+        
         MHImap1 =(1.6726219E-27*Hnuclei*self.data*(self.pixcm)**2)*1.36
+        
         # HI mass map in units of Msun
         MHImap1 /= 2.0E30
+        
         # Total HI mass
         HImass1 = np.nansum(MHImap1)
+        
         # Print results
         print ('Mass: %.3f Msun'%(HImass1))
 
