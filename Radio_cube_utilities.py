@@ -14,7 +14,7 @@ from scipy.stats import binned_statistic_2d
 # analysis on 3D radio data cubes.
 ########################################################################
 class Radio_cube_utilities:
-    def __init__(self, filename):
+    def __init__(self, filename, XCO):
         '''
         Initialises the Radio_cube_utilities Class. 
         This module opens and reads FITS files, defines coordinate 
@@ -23,6 +23,8 @@ class Radio_cube_utilities:
         Parameters
             filename : string
                 the directory link to a radio cube fits file
+            XCO: float
+                CO-H2 conversion factor
         Returns
             Nothing
         '''
@@ -38,6 +40,7 @@ class Radio_cube_utilities:
                                           ,0,0)[1]
         self.extent = [self.lon[0],self.lon[-1],self.lat[0],self.lat[-1]]
         self.chw = np.abs(self.header['CDELT3'])
+        self.XCO = XCO
     
     ########################################################################
     # Method to convert radio cubes to K km/s
@@ -52,12 +55,14 @@ class Radio_cube_utilities:
         '''
         #Allow large operations
         self.cube.allow_huge_operations=True
+        
         #Convert to km/s
         cube = self.cube.with_spectral_unit(u.km/u.s, 
                                             velocity_convention='radio')
         #Convert from Jy/beam to Kelvin
         cube = cube.to(u.K)
         cube.header['BUNIT'] = 'K'
+        
         # Write the cube to a new FITS file
         cube.write(self.filename[:-5]+"_K_km_s.fits", overwrite='True')
 
@@ -84,13 +89,17 @@ class Radio_cube_utilities:
         # accurate second moment maps, the cube must be well masked 
         # spatially and spectrally
         cube_moment = self.cube.moment(order=order)
+        
         # Calculate column density map
         if species == 'HI':
             if order == 0:
                 cube_moment = cube_moment*1.823E18
         if species == 'CO':
             if order == 0:
-                cube_moment = cube_moment*4E20
+                # Convert moment map in kelvin to column density map
+                # in units H nuclei/cm^2 (K km/s)
+                cube_moment = cube_moment*2*self.XCO
+                
         # Write the moment map to a new FITS file
         hdu = fits.PrimaryHDU(cube_moment.value, header=cube_moment.header)
         hdu.writeto(self.filename[:-5]+"_m%i.fits"%(order), 
@@ -118,14 +127,19 @@ class Radio_cube_utilities:
         # emission-free channels.
         # np.nan_to_num replaces nan values with zeroes
         rms_chn = np.std(np.nan_to_num(self.data[0:Nchn]))
+        
         # Calculate the rms noise of the integrated map
         # 1.2 is to account for dependent channels
         rms = rms_chn * self.chw * np.sqrt(Nchn/1.2)
+        
         # Calculate zeroth moment map
         summap = self.cube.moment(order=0)
+        
         # Mask zeroth moment map
         summap.value[summap.value<sigma*rms] = np.nan
+        
         #summap.header['OBJECT'] = self.cube.header['OBJECT']
+        
         # Write the masked moment map to a new FITS file
         hdu = fits.PrimaryHDU(1.823E18*summap.value, header=summap.header)
         hdu.writeto(self.filename[:-5]+"_masked%i_m0.fits"%(sigma), 
@@ -148,7 +162,7 @@ class Radio_cube_utilities:
 
         Returns:
             masked_m0: array
-                Saves a masked zeroth moment map in units H nuclei/cm^2
+                Saves a masked column density map in units H nuclei/cm^2
             noisemap: array
                 Saves a noisemap generated from the unmasked data cube
         '''
@@ -159,24 +173,30 @@ class Radio_cube_utilities:
         # Defining channel width
         #Calculating std across the emissionless cubes
         raw_std = np.std(emiss_free_cube, axis=0)*self.chw*np.sqrt(self.data.shape[0])
+        
         # Calculate zeroth moment map
         summap = self.cube.moment(order=0)
+        
         #Constructing noise map 
         noise_map_arr = np.array(raw_std).reshape(summap.shape[1], 
                                                   summap.shape[1])
         #Constructing S/N map
         sn_cube = summap.value/noise_map_arr
+        
         # Turning the S/N cube into the masking cube
         sn_cube[sn_cube<sigma] = np.nan
+        
         #Masking moment map
         m = np.ma.masked_where(np.isnan(sn_cube), summap.value)
         M = np.ma.filled(m, np.nan)
         summap.header['OBJECT'] = self.cube.header['OBJECT']
+        
         # Write the noisemap to a new FITS file
         hdu = fits.PrimaryHDU(noise_map_arr, header=summap.header)
         hdu.writeto(self.filename[:-5]+"_noisemap.fits", overwrite='True') 
+        
         # Write the masked moment map to a new FITS file
-        hdu2 = fits.PrimaryHDU(4E20*M, header=summap.header)
+        hdu2 = fits.PrimaryHDU(2*self.XCO*M, header=summap.header)
         hdu2.writeto(self.filename[:-5]+"_masked%i_m0.fits"%(sigma), 
                      overwrite='True') 
 
@@ -204,6 +224,7 @@ class Radio_cube_utilities:
         my_cmap[:,0:3] *= 0.95
         cmaps = ListedColormap(my_cmap)
         fontsize = 18
+        
         # Module to calculate projected distance of a pixel from the 
         # Galactic Centre
         def GC_dist(lon,lat, dist):
@@ -218,6 +239,7 @@ class Radio_cube_utilities:
             dist2 = (pixel_x - dist)**2 + pixel_y**2 + pixel_z**2
             GC_dist = np.sqrt(np.abs(dist2))
             return GC_dist
+            
         # Generating a list that includes the projected distance, 
         # velocity and brightness temperature of a pixel
         dist_all1 = []
@@ -229,17 +251,21 @@ class Radio_cube_utilities:
                                                   self.lat[j], dist), 
                                                   self.vel[k], 
                                                   self.data[k][j][i]])
+                        
         # Calculating the 2D statistics of a pixel's projected 
         # distance and velocity weighted by temperature brightness
         sv1 = np.array(dist_all1)
         s1, v1, cd1 = sv1[:,0], sv1[:,1], sv1[:,2]
+        
         # Replacing negative temperture brightness readings with 0
         ib1 = [0 if i < 0 else i for i in cd1]
         statistic1, xedges1, yedges1, binnumber1 = binned_statistic_2d(
             s1, v1, values=ib1, statistic='sum',bins=[100,self.vel.shape[0]])
+        
         # Normalising the intensity
         normed1 = (statistic1.T - np.min(statistic1.T)) / (np.max(statistic1.T) - 
                                                            np.min(statistic1.T))
+        
         # Calculating the same as above but for the CO (other)
         dist_all2 = []
         for k in range(other.data.shape[0]):
@@ -256,14 +282,17 @@ class Radio_cube_utilities:
             s2, v2, values=ib2, statistic='sum',bins=[100,other.vel.shape[0]])
         normed2 = (statistic2.T - np.min(statistic2.T)) / (np.max(statistic2.T) - 
                                                            np.min(statistic2.T))
+        
         # Initialising figure
         fig, axs = plt.subplots(1,1,gridspec_kw={"width_ratios":[1],'hspace': 0.1},
                                 figsize=(10,7),constrained_layout=True)
+        
         # Defining levels for HI and CO
         levels1=np.array([0.15, 0.35,0.55, 0.75,  0.95])
         levels2=np.array([0.2, 0.5, 0.8, 1.])
         row_subplot = 0
         ax = axs
+        
         # Defining extent from statistics
         extent1=[xedges1[0], xedges1[-1], yedges1[0], yedges1[-1]]
         extent2 = [xedges2[0], xedges2[-1], yedges2[0], yedges2[-1]]
@@ -271,9 +300,11 @@ class Radio_cube_utilities:
         mapp = ax.imshow(normed1, origin='lower',extent=extent1,aspect='auto', 
                          interpolation='bilinear',rasterized=True, 
                          cmap='Greys', vmin=0, vmax=1, alpha=0.7)
+        
         # The below can be included if a CO map is prefered over contourf
         #mapg = ax.imshow(normed2, origin='lower',extent=extent2,aspect='auto', 
         # interpolation='bilinear', cmap=cmaps, vmin=0, vmax=1, alpha=1)
+        
         CS1 = ax.contour(normed1, origin='lower',colors='k',levels=levels1,
                          extent=extent1, linewidths=0.6)
         CS12 = ax.contourf(normed2, origin='lower',cmap=cmaps,levels=levels2,
